@@ -59,7 +59,7 @@ def affine_backward(dout, cache):
     
     dx = (dout.dot(w.T)).reshape(x.shape)
     #print(  dout.T.dot(x).shape)
-    dw = np.dot( x.reshape(x.shape[0],np.prod(x.shape[1:])).T,dout)
+    dw = np.dot(x.reshape(x.shape[0], np.prod(x.shape[1:])).T,dout)
 
     db = dout.T.dot(np.ones(dout.shape[0]))
     
@@ -560,9 +560,10 @@ def softmax_loss(x, y):
     shifted_logits = x - np.max(x, axis=1, keepdims=True)
     Z = np.sum(np.exp(shifted_logits), axis=1, keepdims=True)
     log_probs = shifted_logits - np.log(Z)
-    probs = np.exp(log_probs)
     N = x.shape[0]
     loss = -np.sum(log_probs[np.arange(N), y]) / N
+    
+    probs = np.exp(log_probs)
     dx = probs.copy()
     dx[np.arange(N), y] -= 1
     dx /= N
