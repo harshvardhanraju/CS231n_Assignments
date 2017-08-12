@@ -65,7 +65,10 @@ def sgd_momentum(w, dw, config=None):
     # TODO: Implement the momentum update formula. Store the updated value in #
     # the next_w variable. You should also use and update the velocity v.     #
     ###########################################################################
-    pass
+    v = config['momentum'] * v -  config['learning_rate'] * dw # integrate velocity
+     # integrate position
+    w += v
+    next_w = w
     ###########################################################################
     #                             END OF YOUR CODE                            #
     ###########################################################################
@@ -88,10 +91,10 @@ def rmsprop(x, dx, config=None):
     - cache: Moving average of second moments of gradients.
     """
     if config is None: config = {}
-    config.setdefault('learning_rate', 1e-2)
-    config.setdefault('decay_rate', 0.99)
-    config.setdefault('epsilon', 1e-8)
-    config.setdefault('cache', np.zeros_like(x))
+    lr = config.setdefault('learning_rate', 1e-2)
+    decay_rate = config.setdefault('decay_rate', 0.99)
+    ep = config.setdefault('epsilon', 1e-8)
+    cache = config.setdefault('cache', np.zeros_like(x))
 
     next_x = None
     ###########################################################################
@@ -99,11 +102,15 @@ def rmsprop(x, dx, config=None):
     # in the next_x variable. Don't forget to update cache value stored in    #
     # config['cache'].                                                        #
     ###########################################################################
-    pass
+ 
+    cache = decay_rate * cache + (1-decay_rate) * dx**2 
+    x += - lr * dx / (np.sqrt(cache) + ep)
+    next_x = x
+    
     ###########################################################################
     #                             END OF YOUR CODE                            #
     ###########################################################################
-
+    config['cache'] = cache
     return next_x, config
 
 
@@ -122,13 +129,13 @@ def adam(x, dx, config=None):
     - t: Iteration number.
     """
     if config is None: config = {}
-    config.setdefault('learning_rate', 1e-3)
-    config.setdefault('beta1', 0.9)
-    config.setdefault('beta2', 0.999)
-    config.setdefault('epsilon', 1e-8)
-    config.setdefault('m', np.zeros_like(x))
-    config.setdefault('v', np.zeros_like(x))
-    config.setdefault('t', 1)
+    lr = config.setdefault('learning_rate', 1e-3)
+    b1 = config.setdefault('beta1', 0.9)
+    b2 = config.setdefault('beta2', 0.999)
+    ep = config.setdefault('epsilon', 1e-8)
+    m = config.setdefault('m', np.zeros_like(x))
+    v = config.setdefault('v', np.zeros_like(x))
+    t = config.setdefault('t', 1)
 
     next_x = None
     ###########################################################################
@@ -136,9 +143,17 @@ def adam(x, dx, config=None):
     # the next_x variable. Don't forget to update the m, v, and t variables   #
     # stored in config.                                                       #
     ###########################################################################
-    pass
+    m = b1 * m + (1 - b1) * dx
+    mt = m / (1 - b1**t)
+    v = b2 * v + (1 - b2) * dx**2
+    vt = v / (1 - b2**t)
+    x += - lr * mt / (np.sqrt(vt) + ep)
+    next_x = x
+    
     ###########################################################################
     #                             END OF YOUR CODE                            #
     ###########################################################################
-
+    config['m'] = m
+    config['v'] = v
+    config['t'] = t
     return next_x, config

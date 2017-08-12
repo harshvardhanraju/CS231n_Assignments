@@ -206,8 +206,7 @@ class FullyConnectedNet(object):
         self.num_layers = 1 + len(hidden_dims)
         self.dtype = dtype
         self.params = {}
-        
-        
+       
         self.D = input_dim
         self.M = hidden_dims #  list of no of neurons in each unit 
         self.C = num_classes
@@ -224,16 +223,12 @@ class FullyConnectedNet(object):
         # beta2, etc. Scale parameters should be initialized to one and shift      #
         # parameters should be initialized to zero.                                #
         ############################################################################
-        self.params['W1'] = weight_scale * np.random.rand(self.D, self.M[0]) #first layer weights
-        self.params['b1'] = np.zeros(self.M[0])
-        
-        for i in range(self.num_layers-2):
-            self.params['W' + str(i + 2)] = weight_scale * np.random.rand(self.M[i],self.M[i + 1])
-            self.params['b' + str(i + 2)] = np.zeros(self.M[i + 1])
-        #last FC layer for class scores
-        self.params['W' + str(i + 3)] = weight_scale * np.random.rand(self.M[i + 1], self.C) #last layer weights
-        self.params['b' + str(i + 3)] = np.zeros(self.C)
+        W_dim = [self.D] + self.M + [self.C]
        
+        for i in range(self.num_layers):
+            n = str(i + 1)
+            self.params['W' + n] = np.random.normal(0, weight_scale, (W_dim[i],W_dim[i + 1]))
+            self.params['b' + n] = np.zeros(W_dim[i + 1])
         
         
         ############################################################################
@@ -296,32 +291,17 @@ class FullyConnectedNet(object):
         # self.bn_params[1] to the forward pass for the second batch normalization #
         # layer, etc.                                                              #
         ############################################################################
-        W, b = self.params['W' + str(1)], self.params['b' + str(1)] 
-        out, cache['L1'] = affine_relu_forward(X, W, b)
         
+        out = X
         for i in xrange(self.num_layers - 1):
-            W, b = self.params['W' + str(i+2)], self.params['b' + str(i+2)]
-            out, cache['L' + str(i+2)] = affine_relu_forward(out, W, b)
+            n = str(i+1)
+            W, b = self.params['W' + n], self.params['b' + n]
+            out, cache['L' + n] = affine_relu_forward(out, W, b)
+        W, b = self.params['W' + str(self.num_layers)], self.params['b' + str(self.num_layers)]
+        out, cache['L' + str(self.num_layers)] = affine_forward(out, W, b)
         scores = out
             
-        '''
-        #size initialisation
-        affine_cache = {}
-        relu_cache = {}
         
-         
-        #forward pass, affine_out not needed to store, affine_cache(i/ps) & relu_cache need to be stored for backprop
-        W, b = self.params['W' + str(1)], self.params['b' + str(1)] 
-        affine_out, affine_cache[1] = affine_forward(X, W , b)
-        relu_out, relu_cache[1] = relu_forward(affine_out)
-        
-        for i in range(self.num_layers - 1):
-            W, b = self.params['W' + str(i+2)], self.params['b' + str(i+2)]
-            affine_out, affine_cache[i + 2] = affine_forward(relu_out, W, b)
-            relu_out, relu_cache[i + 2] = relu_forward(affine_out)
-         
-        scores = affine_out
-        '''
         ############################################################################
         #                             END OF YOUR CODE                             #
         ############################################################################
@@ -351,31 +331,16 @@ class FullyConnectedNet(object):
         for i in range(self.num_layers):
             #regularisation for all W terms added to loss
             loss += 0.5 * self.reg * np.sum(self.params['W' + str(i+1)] * self.params['W' + str(i+1)])  
-                                            #cache[Last_layer][affine][X].T
-        #grads['W' + str(self.num_layers)] = cache['L'+str(self.num_layers)][0][0].T.dot(disg)
-                                                                                    #cache[Last_layer][affine] 
-        dx, grads['W' + str(self.num_layers)], grads['b' + str(self.num_layers)]  = affine_backward(dsig, cache['L'                                                                                                               + str(self.num_layers)][0])
-        grads['W' + str(self.num_layers)] += self.reg * cache['L' + str(self.num_layers)][0][1]
+        
+                                                                                    #cache[Last_layer] 
+        dx, grads['W' + str(self.num_layers)], grads['b' + str(self.num_layers)]  = affine_backward(dsig, cache['L'                                                                                                               + str(self.num_layers)])
+        grads['W' + str(self.num_layers)] += self.reg * cache['L' + str(self.num_layers)][1]
         
         for i in range(self.num_layers - 1):
-            dx, grads['W' + str(self.num_layers - i -1)], grads['b' + str(self.num_layers - i -1)] = affine_relu_backward(dx, cache['L' + str(self.num_layers - i -1)])
+            dx, grads['W' + str(self.num_layers - i -1)], grads['b' + str(self.num_layers - i -1)] = affine_relu_backward(dx,                                                                                       cache['L' + str(self.num_layers - i -1)])
                                                                                                 #[affine_cache][W]
             grads['W' + str(self.num_layers - i -1)] += self.reg * cache['L' + str(self.num_layers - i -1)][0][1] 
         
-        '''
-        
-        for i in range(self.num_layers):                                           #aff_L(i)      X.T
-            grads['W' + str(i + 1)] = affine_cache[i + 1][0].T
-            temp = dsig
-            j = self.num_layers  #use for indexing
-            while j > i + 1 : #operates higher layer values
-                temp = temp.dot(affine_cache[j][1].T) #affine[1] i.e weights backpass
-                temp = temp * relu_cache[j - 1]     #relu backpass
-                j -= 1
-                
-            grads['W' + str(i + 1)] =  grads['W' + str(i + 1)].dot(temp)
-            #grads['W' + str(i + 1)] += self.reg * W[i + 1]   #regularizing all gradients
-        '''
         
         
         ############################################################################
