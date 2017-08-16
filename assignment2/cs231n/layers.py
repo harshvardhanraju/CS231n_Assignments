@@ -25,9 +25,9 @@ def affine_forward(x, w, b):
     # TODO: Implement the affine forward pass. Store the result in out. You   #
     # will need to reshape the input into rows.                               #
     ###########################################################################
-    x_row=x.reshape(x.shape[0],np.prod(x.shape[1:]))
+    x_row = x.reshape(x.shape[0], np.prod(x.shape[1:]))
    
-    out = x_row.dot(w)+b
+    out = x_row.dot(w) + b
     ###########################################################################
     #                             END OF YOUR CODE                            #
     ###########################################################################
@@ -154,7 +154,7 @@ def batchnorm_forward(x, gamma, beta, bn_param):
     - cache: A tuple of values needed in the backward pass
     """
     mode = bn_param['mode']
-    eps = bn_param.get('eps', 1e-5)
+    eps = bn_param.get('eps', 1e-7)
     momentum = bn_param.get('momentum', 0.9)
 
     N, D = x.shape
@@ -178,7 +178,39 @@ def batchnorm_forward(x, gamma, beta, bn_param):
         # variance, storing your result in the running_mean and running_var   #
         # variables.                                                          #
         #######################################################################
-        pass
+        '''
+        sample_mean = x.mean(axis=0)
+        sample_var = x.var(axis=0)
+        #sample_var = (1 / N) * np.sum((x - sample_mean)**2, axis = 0)
+        norm_x = (x - sample_mean) / np.sqrt(sample_var + eps)
+        out = norm_x * gamma + beta
+        running_mean = momentum * running_mean + (1 - momentum) * sample_mean
+        running_var = momentum * running_var + (1 - momentum) * sample_var 
+        
+        cache = x, sample_mean, sample_var, gamma, eps #backpass through gamma/sample_var  
+        '''
+        #(D,1)
+        sample_mean = np.sum(x, axis=0) / N 
+        #(N,D)
+        num = x - sample_mean
+        num_sqr = num**2
+        dnum_sqr = 2 * num
+        #(D,1)
+        sample_var = diff_mean = np.sum(num_sqr, axis=0) / N
+        den_sqrt = (diff_mean + eps)**0.5
+        dden_sqrt = 0.5 * (sample_var**-0.5)
+        
+        den = 1 / den_sqrt
+        dden = -1 / (den_sqrt**2)
+        
+        #N,D
+        norm_x = num * den 
+        out = norm_x * gamma + beta
+        
+        running_mean = momentum * running_mean + (1 - momentum) * sample_mean
+        running_var = momentum * running_var + (1 - momentum) * sample_var
+        
+        cache = num, den, dnum_sqr, dden_sqrt, dden, gamma, sample_mean, sample_var, eps  
         #######################################################################
         #                           END OF YOUR CODE                          #
         #######################################################################
@@ -189,7 +221,9 @@ def batchnorm_forward(x, gamma, beta, bn_param):
         # then scale and shift the normalized data using gamma and beta.      #
         # Store the result in the out variable.                               #
         #######################################################################
-        pass
+        out = (x - running_mean) / np.sqrt(running_var + eps)
+        out = out * gamma + beta 
+        
         #######################################################################
         #                          END OF YOUR CODE                           #
         #######################################################################
@@ -220,12 +254,54 @@ def batchnorm_backward(dout, cache):
     - dgamma: Gradient with respect to scale parameter gamma, of shape (D,)
     - dbeta: Gradient with respect to shift parameter beta, of shape (D,)
     """
+    N, D = dout.shape
     dx, dgamma, dbeta = None, None, None
+    num, den, dnum_sqr, dden_sqrt, dden, gamma, mean, variance, eps = cache  
     ###########################################################################
     # TODO: Implement the backward pass for batch normalization. Store the    #
     # results in the dx, dgamma, and dbeta variables.                         #
     ###########################################################################
-    pass
+    dbeta = dout.T.dot(np.ones(N,))
+    dgamma = np.sum(dout * ((num) / np.sqrt(variance + eps)), axis=0)
+    '''
+    #my u/v method
+    du_x = 1 / N
+    dvar_x = (1 / N) * 2 * (x - mean) * (1 - 1/N)
+    ddeno_x = 0.5 * ((variance + eps)**-0.5) * dvar_x
+    dnorm_x = ((1 - du_x) * ((variance + eps)**0.5) - ddeno_x * (x - mean)) / (variance + eps)  
+    dx = dout * gamma * (dnorm_x)
+    '''
+    #my  graph method
+    #df_var = 2 * N * (x - mean) * ( -0.5 * (variance + eps)**-1.5)
+    #df_x = (variance + eps)**-0.5
+    #df_u = N * (-1 * (variance + eps)**-0.5 - df_var)
+    #dx = dout * gamma * (df_var + df_x + df_u)
+    
+    #dx = dout * gamma * (1 - (1/N)) * (1 - variance) / np.sqrt(variance + eps)
+    
+    
+    #dx = ((N - 1) / N) * ((1 / (variance + eps)**0.5) - ((x - mean)**2 / (variance + eps)**1.5))   
+    #dx = dx * gamma *dout
+    '''
+    dvar = dout * gamma * (x - mean)
+    ddeno = -dvar * (1 / (variance + eps)**0.5) 
+    droot = ddeno * 0.5 * ((variance + eps)**-0.5)
+    dsum = droot * (1 / N) 
+    dsqr = dsum * 2 * (x - mean)
+    dnum = dout * gamma * (variance + eps)**-0.5
+    dcombined = dnum + dsqr
+    dx1 = dcombined
+    dx2 = -dcombined * (1 / N)
+    
+    dx = dx1 + dx2
+    '''
+    
+    dnorm_x = dout * gamma
+    dden = (num) * dnorm_x * dden * dden_sqrt * (1 / N) * dnum_sqr 
+    dnum = ((variance + eps)**-0.5) * dnorm_x 
+    d_combined = dnum + dden
+    dx = d_combined * (1 - (1 / N)) 
+    
     ###########################################################################
     #                             END OF YOUR CODE                            #
     ###########################################################################
@@ -362,11 +438,28 @@ def conv_forward_naive(x, w, b, conv_param):
     - cache: (x, w, b, conv_param)
     """
     out = None
+    S, P = conv_param['stride'], conv_param['pad']
+    N, C, H, W = x.shape
+    F, C, HH, WW = w.shape
+    
+    x_new = ((W - WW + 2*P) / S) + 1 #W'
+    y_new = ((H - HH + 2*P) / S) + 1 #H'
+    v = np.zeros((N,F,y_new,x_new))
     ###########################################################################
     # TODO: Implement the convolutional forward pass.                         #
     # Hint: you can use the function np.pad for padding.                      #
     ###########################################################################
-    pass
+    #zero padding
+    x = np.lib.pad(x, ((0,0), (0,0), (P, P), (P, P)),'constant') # pad only across x and y direction,not along depth / #examples
+    #print(x.shape)
+    #w = np.flip(np.flip(w, 2), 1) 
+    for n in xrange(N):
+        for k in xrange(F): # calc the conv for F filters , w & b will be diff for diff F and will share parameters otherwise
+            for j in xrange(y_new): 
+                for i in xrange(x_new):
+                    v[n,k,j,i] = np.sum(x[n, :, j * S : j * S + HH, i * S : i * S + WW] * w[k]) + b[k]
+         
+    out = v
     ###########################################################################
     #                             END OF YOUR CODE                            #
     ###########################################################################
@@ -388,10 +481,32 @@ def conv_backward_naive(dout, cache):
     - db: Gradient with respect to b
     """
     dx, dw, db = None, None, None
+    x, w, b, conv_param = cache
+    
     ###########################################################################
-    # TODO: Implement the convolutional backward pass.                        #
-    ###########################################################################
-    pass
+    # TODO: Implement the convolutional backward pcol.                        #
+    ##################################################col######################
+    N, C, H, W = x.shape
+    F, C_, HH, WW = w.shape
+    N_, F_, n_row, n_col = dout.shape
+    S, P = conv_param['stride'], conv_param['pad']
+    x = np.lib.pad(x, ((0,0), (0,0), (P, P), (P, P)),'constant') # pad only across x and y direction,not along depth /
+    
+    dw = np.zeros_like(w)
+    for k in xrange(F):
+        for n in xrange(N): # calc the conv for F filters , w & b will be diff for diff F and will share parameters otherwise
+            for j in xrange(n_col): 
+                for i in xrange(n_row):
+                    dw[k,:,:,:] += dout[n, k, j, i] * x[n, :, j * S : j * S + HH, i * S : i * S + WW]
+           
+    dw /= N    
+                                                            #C,
+    temp1 = (np.sum(np.sum(np.sum(w, axis=3), axis=2), axis=0)).reshape(C,1) #C,1
+    temp2 = (np.sum(dout, axis=1)).reshape(1, -1) #dout-> N,n_row,n_col -> 1,N*n_row*n_col
+    temp3 = np.dot(temp1,temp2) #C,N,n_row,n_col
+    temp4 = np.reshape(temp3, (C,N,n_row,n_col))
+    dx = np.transpose(temp4,(N,C,n_row,n_col))
+    db = np.sum(np.sum(np.sum(np.transpose(dout,(1,0,2,3)), axis=3), axis=2), axis=1)
     ###########################################################################
     #                             END OF YOUR CODE                            #
     ###########################################################################
