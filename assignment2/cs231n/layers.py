@@ -437,6 +437,7 @@ def conv_forward_naive(x, w, b, conv_param):
       W' = 1 + (W + 2 * pad - WW) / stride
     - cache: (x, w, b, conv_param)
     """
+    cache = (x, w, b, conv_param) #original non zero padded values stored
     out = None
     S, P = conv_param['stride'], conv_param['pad']
     N, C, H, W = x.shape
@@ -452,7 +453,7 @@ def conv_forward_naive(x, w, b, conv_param):
     #zero padding
     x = np.lib.pad(x, ((0,0), (0,0), (P, P), (P, P)),'constant') # pad only across x and y direction,not along depth / #examples
     #print(x.shape)
-    #w = np.flip(np.flip(w, 2), 1) 
+    
     for n in xrange(N):
         for k in xrange(F): # calc the conv for F filters , w & b will be diff for diff F and will share parameters otherwise
             for j in xrange(y_new): 
@@ -463,7 +464,7 @@ def conv_forward_naive(x, w, b, conv_param):
     ###########################################################################
     #                             END OF YOUR CODE                            #
     ###########################################################################
-    cache = (x, w, b, conv_param)
+    #cache = (x, w, b, conv_param) #zero padded x is stored here
     return out, cache
 
 
@@ -486,27 +487,43 @@ def conv_backward_naive(dout, cache):
     ###########################################################################
     # TODO: Implement the convolutional backward pcol.                        #
     ##################################################col######################
+    dx = np.zeros_like(x)
+    dw = np.zeros_like(w)
+    
+    S, P = conv_param['stride'], conv_param['pad']
+    x = np.lib.pad(x, ((0,0), (0,0), (P, P), (P, P)),'constant') # pad only across x and y direction,not along depth 
     N, C, H, W = x.shape
     F, C_, HH, WW = w.shape
-    N_, F_, n_row, n_col = dout.shape
-    S, P = conv_param['stride'], conv_param['pad']
-    x = np.lib.pad(x, ((0,0), (0,0), (P, P), (P, P)),'constant') # pad only across x and y direction,not along depth /
+    #N_, F_, Hd, Wd = dout.shape  # Hd = (W - WW + 2*P) / S) + 1 i.e zero padded size 
     
-    dw = np.zeros_like(w)
-    for k in xrange(F):
-        for n in xrange(N): # calc the conv for F filters , w & b will be diff for diff F and will share parameters otherwise
-            for j in xrange(n_col): 
-                for i in xrange(n_row):
-                    dw[k,:,:,:] += dout[n, k, j, i] * x[n, :, j * S : j * S + HH, i * S : i * S + WW]
-           
-    dw /= N    
-                                                            #C,
-    temp1 = (np.sum(np.sum(np.sum(w, axis=3), axis=2), axis=0)).reshape(C,1) #C,1
-    temp2 = (np.sum(dout, axis=1)).reshape(1, -1) #dout-> N,n_row,n_col -> 1,N*n_row*n_col
-    temp3 = np.dot(temp1,temp2) #C,N,n_row,n_col
-    temp4 = np.reshape(temp3, (C,N,n_row,n_col))
-    dx = np.transpose(temp4,(N,C,n_row,n_col))
-    db = np.sum(np.sum(np.sum(np.transpose(dout,(1,0,2,3)), axis=3), axis=2), axis=1)
+    
+    for f in xrange(F):
+        for c in xrange(C): 
+            for j in xrange(HH): 
+                for i in xrange(WW):
+                     #H-(HH-1)is coverage area of W1 ,sum across all N,as same W1 would be interacting with all the samples(N)
+                     #F,C,HH,WW            N,F,Hd,Wd       N,C,H,W        
+                    dw[f,c,j,i] = np.sum(dout[:, f,:,:] * x[:, c, j:j + (H - HH + 1):S, i:i + (W - WW + 1):S])
+    
+    db = np.sum(np.sum(np.sum(np.transpose(dout, (1,0,2,3)), axis=3), axis=2), axis=1)
+    
+    #bad logic to zero pad, required for mathematical sense
+    dout = np.lib.pad(dout, ((0,0), (0,0), (P, P), (P, P)),'constant')
+    w_flip = np.flip(np.flip(w, axis=3), axis=2)
+    #print(w.shape)
+    #convolution of dout with W flipped in both spatial directions
+    for n in xrange(N):
+        for c in xrange(C): 
+            for j in xrange(0, H - 2*P): # H-2P is the original dim of x before zero pad 
+                for i in range(0, W - 2*P):
+                    #sum across filters as same X11 interacts with all filters, so their contribution should add
+                    #N, C, H, W           N_, F_, Hd, Wd                                      F, C_, HH, WW
+                    dx[n,c,j,i] = np.sum(dout[n, :, j * S : j * S + HH, i * S : i * S + WW] * w_flip[:, c, :, :]) 
+    
+    
+                    
+    #print(dx.shape)                 
+   
     ###########################################################################
     #                             END OF YOUR CODE                            #
     ###########################################################################
