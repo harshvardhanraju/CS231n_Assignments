@@ -80,7 +80,9 @@ class ThreeLayerConvNet(object):
         # computing the class scores for X and storing them in the scores          #
         # variable.                                                                #
         ############################################################################
-        pass
+        # **conv - relu - 2x2 max pool - affine - relu - affine - softmax
+        
+        
         ############################################################################
         #                             END OF YOUR CODE                             #
         ############################################################################
