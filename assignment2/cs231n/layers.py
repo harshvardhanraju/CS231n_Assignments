@@ -27,6 +27,7 @@ def affine_forward(x, w, b):
     ###########################################################################
     x_row = x.reshape(x.shape[0], np.prod(x.shape[1:]))
     #N,M 
+    w = w.reshape(*x.shape[1:],w.shape[-1])
     out = x_row.dot(w) + b
     ###########################################################################
     #                             END OF YOUR CODE                            #
@@ -62,7 +63,8 @@ def affine_backward(dout, cache):
     dw = np.dot(x.reshape(x.shape[0], np.prod(x.shape[1:])).T,dout)
 
     db = dout.T.dot(np.ones(dout.shape[0]))
-    
+    dw = dw.reshape(*w.shape)
+    #print(dw.shape)
     ###########################################################################
     #                             END OF YOUR CODE                            #
     ###########################################################################
@@ -285,9 +287,10 @@ def batchnorm_backward(dout, cache):
     #D,                      D,                          D,
     dsample_var = (0.5 * ((sample_var + eps)**(-0.5))) * dden_sqrt
     #N,D                                    D,
-    dnum_sqr = (1. / N) * np.ones((N,D)) * dsample_var
+    #dnum_sqr = (1. / N) * np.ones((N,D)) * dsample_var
     #N,D        N,D       N,D
-    dnume = 2. * num * dnum_sqr
+    #dnume = 2. * num * dnum_sqr
+    dnume = (2./N) * num * dsample_var
     #N,D       N,D
     dx += dnume   #same as reshape(using np.ones) into N,D and addition
     #D,                    N,D
@@ -314,24 +317,8 @@ def batchnorm_backward(dout, cache):
     
     #dx = ((N - 1) / N) * ((1 / (variance + eps)**0.5) - ((x - mean)**2 / (variance + eps)**1.5))   
     #dx = dx * gamma *dout
-    '''
-    dvar = dout * gamma * (x - mean)
-    ddeno = -dvar * (1 / (variance + eps)**0.5) 
-    droot = ddeno * 0.5 * ((variance + eps)**-0.5)
-    dsum = droot * (1 / N) 
-    dsqr = dsum * 2 * (x - mean)
-    dnum = dout * gamma * (variance + eps)**-0.5
-    dcombined = dnum + dsqr
-    dx1 = dcombined
-    dx2 = -dcombined * (1 / N)
-    
-    dx = dx1 + dx2
-    '''
-    
-    #dden = (num) * dnorm_x * dden * dden_sqrt * (1 / N) * dnum_sqr 
-    #dnum = ((variance + eps)**-0.5) * dnorm_x 
-    #d_combined = dnum + dden
-    #dx = d_combined * (1 - (1 / N)) 
+  
+  
     
     ###########################################################################
     #                             END OF YOUR CODE                            #
@@ -353,6 +340,10 @@ def batchnorm_backward_alt(dout, cache):
 
     Inputs / outputs: Same as batchnorm_backward
     """
+    ############  Need to debug , dx is not proper ##################
+    
+    
+    
     dx, dgamma, dbeta = None, None, None
     dx = np.zeros_like(dout)
     N, D = dout.shape
@@ -368,11 +359,11 @@ def batchnorm_backward_alt(dout, cache):
     
     dbeta = dout.T.dot(np.ones(N,))
     dgamma = np.sum(dout * (num * deno), axis=0)
-    #N,D                      D,                                           D,                       N,D                        
-    dx = dout * gamma * (1. - (1. / N)) * ((sample_var + eps)**0.5) * (1. - ((1. / N) * ((sample_var + eps)**-1) * ((num)**2)))
-    #dx = (1. / N) * gamma * (var + eps)**(-1. / 2.) * (N * dout - np.sum(dout, axis=0)
-                                                       #- (x - mu) * (var + eps)**(-1.0) * np.sum(dout * (x - mu), axis=0))
-    print(dx.shape)
+    #N,D                 N,D                  D            N,D             D,  
+    dx = ((1. - (1./N)) * np.ones((N,D)) * den_sqrt) - ((num**2) * (0.5 * ((sample_var + eps)**-0.5)) * (2.0/N) * (1. - (1./N))) / ((sample_var + eps) * np.ones((N,D)))
+    dx = dx * dout * gamma 
+    
+    
     ###########################################################################
     #                             END OF YOUR CODE                            #
     ###########################################################################
@@ -502,6 +493,7 @@ def conv_forward_naive(x, w, b, conv_param):
                     v[n,k,j,i] = np.sum(x[n, :, j * S : j * S + HH, i * S : i * S + WW] * w[k]) + b[k]
          
     out = v
+    #print(out.shape)
     ###########################################################################
     #                             END OF YOUR CODE                            #
     ###########################################################################
@@ -680,7 +672,12 @@ def spatial_batchnorm_forward(x, gamma, beta, bn_param):
     - cache: Values needed for the backward pass
     """
     out, cache = None, None
-
+    N, C, H, W = x.shape
+    mode = bn_param['mode']
+    eps = bn_param.get('eps', 1e-7)
+    momentum = bn_param.get('momentum', 0.9)
+    running_mean = bn_param.get('running_mean', np.zeros(C, dtype=x.dtype))
+    running_var = bn_param.get('running_var', np.zeros(C, dtype=x.dtype))
     ###########################################################################
     # TODO: Implement the forward pass for spatial batch normalization.       #
     #                                                                         #
@@ -688,7 +685,38 @@ def spatial_batchnorm_forward(x, gamma, beta, bn_param):
     # version of batch normalization defined above. Your implementation should#
     # be very short; ours is less than five lines.                            #
     ###########################################################################
-    pass
+    #N*H*W,C    N,C,H,W      N,H,W,C              
+    x_reshape = x.transpose(0,2,3,1).reshape(N*H*W, C)
+    if mode == 'train':
+        #C,                               N*H*W,C 
+        sample_mean, sample_var = np.mean(x_reshape, axis=0), np.var(x_reshape, axis=0)
+        
+        #N*H*W,C   N*H*W,C             C,                                      
+        x_hat = (x_reshape - sample_mean) /  np.sqrt(sample_var + eps) 
+        norm_x = x_hat * gamma + beta
+        #N,C,H,W   
+        out = norm_x.reshape(N,H,W,C).transpose(0,3,1,2) 
+        
+        running_mean = momentum * running_mean + (1 - momentum) * sample_mean
+        running_var = momentum * running_var + (1 - momentum) * sample_var
+        cache = x_hat, gamma, x_reshape, sample_mean, sample_var, eps
+    
+    elif mode == 'test':
+        #N*H*W,C  N*H*W,C      C
+        norm_x = (x_reshape - running_mean) / np.sqrt(running_var + eps)
+        norm_x = norm_x * gamma + beta 
+        #N,C,H,W  #N*H*W,C 
+        out = norm_x.reshape(N,H,W,C).transpose(0,3,1,2)
+     
+    else:
+        raise ValueError('Invalid forward batchnorm mode "%s"' % mode)
+
+    # Store the updated running means back into bn_param
+    bn_param['running_mean'] = running_mean
+    bn_param['running_var'] = running_var
+    
+    
+    
     ###########################################################################
     #                             END OF YOUR CODE                            #
     ###########################################################################
@@ -710,7 +738,9 @@ def spatial_batchnorm_backward(dout, cache):
     - dbeta: Gradient with respect to shift parameter, of shape (C,)
     """
     dx, dgamma, dbeta = None, None, None
-
+    dx = np.zeros_like(dout)
+    N, C, H, W = dout.shape
+    x_hat, gamma, x_reshape, sample_mean, sample_var, eps = cache 
     ###########################################################################
     # TODO: Implement the backward pass for spatial batch normalization.      #
     #                                                                         #
@@ -718,7 +748,40 @@ def spatial_batchnorm_backward(dout, cache):
     # version of batch normalization defined above. Your implementation should#
     # be very short; ours is less than five lines.                            #
     ###########################################################################
-    pass
+    #N*H*W,C  N,C,H,W       N,H,W,C        N*H*W,C
+    dout_t = dout.transpose(0,2,3,1).reshape(N*H*W, C)
+    
+    #C             C,N*H*W
+    dbeta = np.sum(dout_t, axis=0)
+    #C              N*H*W,C  N*H*W,C
+    dgamma = np.sum(x_hat * dout_t, axis=0)
+    
+    #############     Calculating dx below   ############################
+    
+    #N*H*W,C  N*H*W,C   C,
+    dx_hat = dout_t * gamma
+    
+    #N*H*W,C  N*H*W,C           C,
+    dx = dx_hat / np.sqrt(sample_var + eps)
+    
+    #C               N*H*W,C         C,
+    dmean = np.sum(-dx_hat / np.sqrt(sample_var + eps), axis=0)
+    
+    #C             N*H*W,C    N*H*W,C        C                      C
+    dvar = np.sum(dx_hat * (x_reshape - sample_mean) * (-0.5 * (sample_var + eps)**-1.5), axis=0)
+    #print(dmean,dvar)
+    #N*H*W,C                 N*H*W,C      C           C
+    dx += (2.0 / (N*H*W)) * (x_reshape - sample_mean) * dvar
+   
+    #C                                 N*H*W,C      C              C
+    dmean += np.sum((-2.0 / (N*H*W)) * (x_reshape - sample_mean) * dvar, axis=0) 
+    
+    #N*H*W,C               C              N*H*W,C 
+    dx += (1.0 / (N*H*W)) * dmean * np.ones((N*H*W,C))
+    
+    #N,C,H,W    N*H*W,C                N,C,H,W 
+    dx = dx.reshape(N,H,W,C).transpose(0,3,1,2)
+    
     ###########################################################################
     #                             END OF YOUR CODE                            #
     ###########################################################################
