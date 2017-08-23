@@ -26,9 +26,9 @@ def affine_forward(x, w, b):
     # will need to reshape the input into rows.                               #
     ###########################################################################
     x_row = x.reshape(x.shape[0], np.prod(x.shape[1:]))
-    #N,M 
-    w = w.reshape(*x.shape[1:],w.shape[-1])
-    out = x_row.dot(w) + b
+    #N,M  #used for 3 loayer cnn when we need weights of multiple dims
+    w_new = w.reshape(x_row.shape[1],w.shape[-1])
+    out = x_row.dot(w_new) + b
     ###########################################################################
     #                             END OF YOUR CODE                            #
     ###########################################################################
@@ -56,11 +56,12 @@ def affine_backward(dout, cache):
     ###########################################################################
     # TODO: Implement the affine backward pass.                               #
     ###########################################################################
+    x_row = x.reshape(x.shape[0], np.prod(x.shape[1:]))
+    w_new = w.reshape(x_row.shape[1],w.shape[-1])
     
-    
-    dx = (dout.dot(w.T)).reshape(x.shape)
+    dx = (dout.dot(w_new.T)).reshape(x.shape)
     #print(  dout.T.dot(x).shape)
-    dw = np.dot(x.reshape(x.shape[0], np.prod(x.shape[1:])).T,dout)
+    dw = np.dot(x_row.T, dout)
 
     db = dout.T.dot(np.ones(dout.shape[0]))
     dw = dw.reshape(*w.shape)

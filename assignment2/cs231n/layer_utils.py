@@ -16,7 +16,7 @@ def affine_relu_forward(x, w, b):
     - cache: Object to give to the backward pass
     """
     a, fc_cache = affine_forward(x, w, b)
-    print(w.shape)
+    #print(w.shape)
     out, relu_cache = relu_forward(a)
     cache = (fc_cache, relu_cache)
     return out, cache
@@ -29,7 +29,7 @@ def affine_relu_backward(dout, cache):
     fc_cache, relu_cache = cache
     da = relu_backward(dout, relu_cache)
     dx, dw, db = affine_backward(da, fc_cache)
-    print(dw.shape)
+    #print(dw.shape)
     return dx, dw, db
 
 

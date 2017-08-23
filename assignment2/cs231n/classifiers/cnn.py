@@ -89,8 +89,14 @@ class ThreeLayerConvNet(object):
         # computing the class scores for X and storing them in the scores          #
         # variable.                                                                #
         ############################################################################
+        
         # **conv - relu - 2x2 max pool - affine - relu - affine - softmax
+        #   X : num_inputs, *input_dim
+        #  W1 : F, C, filtersize,filtersize  
+        #  W2 : F, inpu_image_H/2,inpu_image_W/2,hidden_dims
+        
         out, cache['conv'] = conv_relu_pool_forward(X, W1, b1, conv_param, pool_param)
+        #print(out.shape, W2.shape)
         out, cache['hidden'] = affine_relu_forward(out, W2, b2)
         out, cache['final'] = affine_forward(out, W3, b3)
         scores = out
@@ -113,9 +119,9 @@ class ThreeLayerConvNet(object):
         dx, grads['W3'], grads['b3']= affine_backward(dx, cache['final'])
         dx, grads['W2'], grads['b2'] = affine_relu_backward(dx, cache['hidden'])
         dx, grads['W1'], grads['b1'] = conv_relu_pool_backward(dx, cache['conv'])
-        print(W2.shape,grads['W2'].shape)
-        grads['W3'] += (self.reg * W3**2).reshape(-1, W3.shape[-1])
-        grads['W2'] += (self.reg * W2**2).reshape(-1, W2.shape[-1])
+        #print(W2.shape,grads['W2'].shape)
+        grads['W3'] += (self.reg * W3**2)#.reshape(-1, W3.shape[-1])
+        grads['W2'] += (self.reg * W2**2)#.reshape(-1, W2.shape[-1])
         grads['W1'] += (self.reg * W1**2)
         
         ############################################################################
