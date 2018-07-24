@@ -1,4 +1,2 @@
-Training repository - Gunasekaran
-
-Initial Commit
+CS231n Assingments Implementations which I did during my learning.
 
